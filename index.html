@@ -187,9 +187,11 @@ main{position:relative;z-index:1}
 .hero-cta{display:flex;gap:12px;flex-wrap:wrap}
 
 .stats{display:flex;margin-top:40px;border-top:1px solid var(--line)}
+@media(max-width:420px){.stats{gap:0}.stat .n{font-size:1.25rem}}
 .stat{padding:18px 24px 0 0;margin-right:24px;border-right:1px solid var(--line)}
+@media(max-width:420px){.stat{padding-right:14px;margin-right:14px}}
 .stat:last-child{border-right:0;margin-right:0}
-.stat .n{font-family:var(--serif);font-size:1.55rem;line-height:1.05;color:var(--brass-lit)}
+.stat .n{font-family:var(--serif);font-size:1.55rem;line-height:1.05;color:var(--brass-lit);white-space:nowrap}
 .stat .l{font-size:.7rem;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin-top:4px}
 
 .frame{
@@ -387,6 +389,33 @@ footer{border-top:1px solid var(--line);padding:26px 0 42px;position:relative;z-
 }
 .tt:hover .tt-trigger{background:var(--brand,var(--cream));color:#fff;border-color:var(--brand,var(--cream));transform:translateY(-3px)}
 .tt-trigger svg{width:18px;height:18px}
+
+/* ---------- mobile performance ----------
+   backdrop-filter, large filter:blur() and mix-blend-mode each force the
+   browser to re-composite a full-screen layer on every scroll frame. On a
+   phone that is the difference between 20fps and smooth. The cheap
+   substitutes below look near identical at these sizes. */
+@media (max-width:900px), (pointer:coarse){
+  header.stuck .nav{
+    backdrop-filter:none;
+    background:rgba(12,17,14,.95);
+  }
+  .frame-badge,.chip{backdrop-filter:none;background:rgba(12,17,14,.88)}
+
+  /* the radial gradient already falls off softly, so dropping the 120px blur
+     costs almost nothing visually and saves a very expensive repaint */
+  .warm i{filter:none;opacity:.18}
+
+  .grain{mix-blend-mode:normal;opacity:.03}
+
+  .ticker{-webkit-mask-image:none;mask-image:none}
+  .ticker-run{will-change:transform}
+
+  /* hover-only flourishes never fire on touch — switch them off so they
+     cannot cost anything */
+  .frame img,.card-img img,.gal img{transition:none}
+  .card::before{display:none}
+}
 </style>
 <noscript><style>
   /* Without JS the reveal animations never run, so everything that starts
@@ -601,21 +630,31 @@ function boot(){
   const heroFrame = document.getElementById('hero-frame');
 
   /* ---- scroll: sticky nav, progress bar, hero parallax ---- */
-  let ticking = false;
+  /* Phones and tablets skip the parallax entirely. It is a decorative effect
+     that costs a transform + repaint on every scroll frame, and it is the
+     first thing to drop when the device is already struggling. */
+  const lowPower = matchMedia('(max-width:900px),(pointer:coarse)').matches;
+
+  let ticking = false, rescueTimer = null;
   function onScroll(){
-    if(ticking) return;
-    ticking = true;
-    requestAnimationFrame(()=>{
-      const y = scrollY;
-      const h = document.documentElement;
-      hdr.classList.toggle('stuck', y > 10);
-      prog.style.width = (y/(h.scrollHeight-h.clientHeight)*100) + '%';
-      if(heroFrame && !reduced && y < innerHeight*1.2){
-        heroFrame.style.transform = 'translateY(' + (y*0.06) + 'px)';
-      }
-      rescue();
-      ticking = false;
-    });
+    if(!ticking){
+      ticking = true;
+      requestAnimationFrame(()=>{
+        const y = scrollY;
+        const h = document.documentElement;
+        hdr.classList.toggle('stuck', y > 10);
+        prog.style.width = (y/(h.scrollHeight-h.clientHeight)*100) + '%';
+        if(heroFrame && !reduced && !lowPower && y < innerHeight*1.2){
+          heroFrame.style.transform = 'translateY(' + (y*0.06) + 'px)';
+        }
+        ticking = false;
+      });
+    }
+    /* rescue() reads computed styles, which forces a layout recalculation.
+       Running it every scroll frame tanks the frame rate on phones, so it
+       only runs once the scroll settles. */
+    clearTimeout(rescueTimer);
+    rescueTimer = setTimeout(rescue, 140);
   }
 
   /* Anything on screen that the observer never got to (anchor jump, refresh
