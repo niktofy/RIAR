@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400;6..96,500&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.2/anime.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.2/anime.min.js"></script>
 <style>
 :root{
   --ink:#0C110E;
@@ -388,6 +388,13 @@ footer{border-top:1px solid var(--line);padding:26px 0 42px;position:relative;z-
 .tt:hover .tt-trigger{background:var(--brand,var(--cream));color:#fff;border-color:var(--brand,var(--cream));transform:translateY(-3px)}
 .tt-trigger svg{width:18px;height:18px}
 </style>
+<noscript><style>
+  /* Without JS the reveal animations never run, so everything that starts
+     hidden must be shown outright. Half the page depends on this. */
+  .rv{opacity:1!important;transform:none!important}
+  .lm > span{transform:none!important}
+  .label .ln{width:26px!important}
+</style></noscript>
 </head>
 <body>
 
@@ -583,6 +590,10 @@ footer{border-top:1px solid var(--line);padding:26px 0 42px;position:relative;z-
 
 <script>
 (function(){
+/* anime.js is deferred so it never blocks HTML parsing. That means this inline
+   script would otherwise run first and read window.anime as undefined, so we
+   wait for DOMContentLoaded, by which point deferred scripts have executed. */
+function boot(){
   const reduced = matchMedia('(prefers-reduced-motion:reduce)').matches;
   const A = window.anime;
   const hdr = document.getElementById('hdr');
@@ -602,7 +613,21 @@ footer{border-top:1px solid var(--line);padding:26px 0 42px;position:relative;z-
       if(heroFrame && !reduced && y < innerHeight*1.2){
         heroFrame.style.transform = 'translateY(' + (y*0.06) + 'px)';
       }
+      rescue();
       ticking = false;
+    });
+  }
+
+  /* Anything on screen that the observer never got to (anchor jump, refresh
+     mid-page, back button) is shown outright. `data-seen` keeps this from
+     fighting an animation that is already running. */
+  function rescue(){
+    document.querySelectorAll('.rv:not([data-seen]),#pgrid:not([data-seen]) > *,#steps:not([data-seen]) > *,#gal:not([data-seen]) > *').forEach(el=>{
+      const r = el.getBoundingClientRect();
+      if(r.top < innerHeight && r.bottom > 0 && getComputedStyle(el).opacity === '0'){
+        el.style.opacity = 1;
+        el.style.transform = 'none';
+      }
     });
   }
   addEventListener('scroll', onScroll, {passive:true});
@@ -650,6 +675,7 @@ footer{border-top:1px solid var(--line);padding:26px 0 42px;position:relative;z-
       if(!e.isIntersecting) return;
       const el = e.target;
       io.unobserve(el);
+      el.dataset.seen = '1';
 
       if(el.dataset.count){ runCounter(el); return; }
 
@@ -704,28 +730,12 @@ footer{border-top:1px solid var(--line);padding:26px 0 42px;position:relative;z-
     st.style.color = open ? 'var(--brass-lit)' : 'var(--muted)';
   }
 
-  /* ---- safety net ----
-     If the page is opened already scrolled (refresh, deep link, back button),
-     elements above the fold never intersect and would stay invisible forever.
-     Only rescues what should already be on screen; below-fold items keep their
-     scroll animation. */
-  setTimeout(()=>{
-    document.querySelectorAll('.rv,#pgrid > *,#steps > *,#gal > *').forEach(el=>{
-      const r = el.getBoundingClientRect();
-      if(r.top < innerHeight && getComputedStyle(el).opacity === '0'){
-        el.style.opacity = 1;
-        el.style.transform = 'none';
-      }
-    });
-    document.querySelectorAll('[data-count]').forEach(el=>{
-      const r = el.getBoundingClientRect();
-      if(r.top < innerHeight) runCounter(el);
-    });
-  }, 2000);
-
   /* ---- go ---- */
-  if(document.readyState === 'complete') heroIntro();
-  else addEventListener('load', heroIntro);
+  heroIntro();
+}
+
+if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+else boot();
 })();
 </script>
 
